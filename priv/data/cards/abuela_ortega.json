@@ -1,0 +1,8 @@
+{
+  "name": "Abuela Ortega",
+  "factions": ["Guild"],
+  "keywords": ["Family"],
+  "versatile": false,
+  "role": "Enforcer",
+  "boxes": ["Perdita Core Box"]
+}

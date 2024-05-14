@@ -15,15 +15,16 @@ resource_exists(Req, State0) ->
     {Found, Req, State1}.
 
 to_html(Req, State=#{card := Card=#{name := Name,
-                                    keywords := Keywords0,
+                                    keywords := Keywords,
+                                    factions := Factions,
                                     boxes := Boxes},
                      template := Template}) ->
-    Keywords = build_keywords(Keywords0),
     Body = Template(#{title => Name,
-                      card => Card#{keywords => Keywords},
+                      card => Card#{keywords => comma_separate(Keywords),
+                                    factions => comma_separate(Factions)
+                                   },
                       box_count => max(length(Boxes), 1)}),
     {Body, Req, State}.
 
-build_keywords([KW|Keywords]) ->
-    lists:foldl(fun(V, Acc) -> <<Acc/binary, ",", V/binary>> end,
-                KW, Keywords).
+comma_separate([H|T]) ->
+    lists:foldl(fun(V, Acc) -> <<Acc/binary, ",", V/binary>> end, H, T).

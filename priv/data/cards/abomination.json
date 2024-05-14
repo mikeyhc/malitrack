@@ -1,6 +1,6 @@
 {
   "name": "Abomination",
-  "faction": "Outcasts",
+  "factions": ["Outcasts"],
   "keywords": ["Amalgam"],
   "versatile": false,
   "role": "Minion",

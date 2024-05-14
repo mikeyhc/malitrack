@@ -9,7 +9,7 @@
 -export([init/1, handle_call/3, handle_cast/2]).
 
 -record(card, {name :: string(),
-               faction :: string(),
+               factions :: string(),
                keywords :: [string()],
                versatile :: boolean(),
                role :: string(),
@@ -65,21 +65,25 @@ load_cards(Dir0) ->
                false -> Dir0 ++ "/"
            end,
     CardList = lists:map(fun(F) -> read_card(Dir1 ++ F) end, Files),
-    Lower = fun(V) -> list_to_binary(string:lowercase(binary_to_list(V))) end,
-    lists:foldl(fun(C, M) -> M#{Lower(C#card.name) => C} end, #{}, CardList).
+    MakeKey = fun(#card{name=V0}) ->
+                      V1 = string:lowercase(binary_to_list(V0)),
+                      V2 = lists:flatten(string:replace(V1, " ", "-")),
+                      list_to_binary(V2)
+              end,
+    lists:foldl(fun(C, M) -> M#{MakeKey(C) => C} end, #{}, CardList).
 
 read_card(Path) ->
     {ok, JsonData} = file:read_file(Path),
     CardData = jsone:decode(JsonData),
     #{<<"name">> := Name,
-      <<"faction">> := Faction,
+      <<"factions">> := Factions,
       <<"keywords">> := Keywords,
       <<"versatile">> := Versatile,
       <<"role">> := Role,
       <<"boxes">> := Boxes} = CardData,
     logger:info("loaded ~s from ~s", [Name, Path]),
     Card = #card{name=Name,
-                 faction=Faction,
+                 factions=Factions,
                  keywords=Keywords,
                  versatile=Versatile,
                  role=Role,
@@ -93,17 +97,17 @@ read_card(Path) ->
     end,
     Card.
 
-card_to_map(#card{name=Name, faction=Faction, keywords=Keywords,
+card_to_map(#card{name=Name, factions=Factions, keywords=Keywords,
                   versatile=Versatile, role=Role, limit=Limit,
                   boxes=Boxes}) ->
-    #{name => Name, faction => Faction, keywords => Keywords,
+    #{name => Name, factions => Factions, keywords => Keywords,
       versatile => Versatile, role => Role, limit => Limit,
       boxes => Boxes}.
 
 validate_card(Card) ->
     Results = lists:map(fun(Check) -> Check(Card) end,
                         [fun valid_name/1,
-                         fun valid_faction/1,
+                         fun valid_factions/1,
                          fun valid_keyword/1,
                          fun valid_versatile/1,
                          fun valid_role/1,
@@ -113,16 +117,21 @@ validate_card(Card) ->
 valid_name(#card{name=Name}) when is_binary(Name) -> ok;
 valid_name(_Card) -> "invalid name type".
 
-valid_faction(#card{faction= <<"Guild">>}) -> ok;
-valid_faction(#card{faction= <<"Resurrectionists">>}) -> ok;
-valid_faction(#card{faction= <<"Neverborn">>}) -> ok;
-valid_faction(#card{faction= <<"Arcanists">>}) -> ok;
-valid_faction(#card{faction= <<"Outcasts">>}) -> ok;
-valid_faction(#card{faction= <<"Bayou">>}) -> ok;
-valid_faction(#card{faction= <<"Ten Thunders">>}) -> ok;
-valid_faction(#card{faction= <<"Explorer's Society">>}) -> ok;
-valid_faction(#card{faction=Faction}) ->
-    lists:flatten(io_lib:format("invalid faction: ~s", [Faction])).
+valid_factions(#card{factions=Factions}) ->
+    FactionList = [<<"Guild">>,
+                   <<"Resurrectionists">>,
+                   <<"Neverborn">>,
+                   <<"Arcanists">>,
+                   <<"Outcasts">>,
+                   <<"Bayou">>,
+                   <<"Ten Thunders">>,
+                   <<"Explorer's Society">>],
+    InFaction = fun(F) -> lists:any(fun(G) -> F =:= G end, FactionList) end,
+    case lists:all(InFaction, Factions) of
+        true -> ok;
+        false ->
+            lists:flatten(io_lib:format("invalid factions: ~s", [Factions]))
+    end.
 
 valid_keyword(_Keywords) -> ok.
 
