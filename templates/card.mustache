@@ -1,0 +1,37 @@
+{{#card}}
+<h1>{{name}}</h1>
+
+<table>
+    <tbody>
+        <tr>
+            <td>Faction:</td>
+            <td>{{faction}}</td>
+        </tr>
+        <tr>
+            <td>Keywords:</td>
+            <td>{{keywords}}</td>
+        </tr>
+        <tr>
+            <td>Versatile:</td>
+            <td>
+                {{#versatile}}Yes{{/versatile}}
+                {{^versatile}}No{{/versatile}}
+            </td>
+        </tr>
+        <tr>
+            <td>Role:</td>
+            <td>{{role}}</td>
+        </tr>
+        <tr>
+            <td>Limit:</td>
+            <td>{{ limit }}</td>
+        </tr>
+        {{#boxes}}
+        <tr>
+            <td>Boxes:</td>
+            <td>{{.}}</td>
+        </tr>
+        {{/boxes}}
+    </tbody>
+</table>
+{{/card}}

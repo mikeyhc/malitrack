@@ -1,0 +1,9 @@
+{
+  "name": "Abomination",
+  "faction": "Outcasts",
+  "keywords": ["Amalgam"],
+  "versatile": false,
+  "role": "Minion",
+  "limit": 8,
+  "boxes": ["Desolation"]
+}
