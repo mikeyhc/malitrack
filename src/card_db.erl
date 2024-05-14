@@ -3,7 +3,8 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, get_card/1]).
+-export([start_link/0, start_link/1, get_card/1, default_card_file/0,
+         get_keyword/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2]).
@@ -12,22 +13,27 @@
                factions :: string(),
                keywords :: [string()],
                versatile :: boolean(),
-               role :: string(),
+               station :: string(),
                limit :: pos_integer(),
                boxes :: [string()]
               }).
 -type card() :: #card{}.
 
--record(state, {card_dir :: string(),
-                cards=#{} :: #{string() => card()}}).
+-record(state, {card_file    :: string(),
+                cards=#{}    :: #{string() => card()},
+                keywords=#{} :: #{string() => [string()]}}).
 
 %%====================================================================
 %% API
 %%====================================================================
 
+-spec start_link() -> gen_server:start_ret().
+start_link() ->
+    start_link(default_card_file()).
+
 -spec start_link(string()) -> gen_server:start_ret().
-start_link(CardDir) ->
-    gen_server:start_link(?MODULE, #{dir => CardDir}, []).
+start_link(CardFile) ->
+    gen_server:start_link(?MODULE, #{card_file => CardFile}, []).
 
 -spec get_card(string() | binary()) -> {ok, #{atom() => any()}} |
                                        {error, not_found}.
@@ -36,59 +42,68 @@ get_card(Name) when is_list(Name) ->
 get_card(Name) ->
     gen_server:call(malitrack_sup:get_card_db(), {get_card, Name}).
 
+-spec get_keyword(string() | binary()) -> {ok, [string()]} |
+                                          {error, not_found}.
+get_keyword(Name) when is_list(Name) ->
+    get_keyword(list_to_binary(Name));
+get_keyword(Name) ->
+    gen_server:call(malitrack_sup:get_card_db(), {get_keyword, Name}).
+
+-spec default_card_file() -> string().
+default_card_file() ->
+    {ok, CardFileEnv} = application:get_env(malitrack, card_file),
+    filename:join([code:priv_dir(malitrack), CardFileEnv]).
+
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
 
-init(#{dir := Dir}) ->
+init(#{card_file := CardFile}) ->
     gen_server:cast(self(), load),
-    {ok, #state{card_dir=Dir}}.
+    {ok, #state{card_file=CardFile}}.
 
 handle_call({get_card, Name}, _From, State) ->
     case maps:get(string:lowercase(Name), State#state.cards, false) of
         false -> {reply, {error, not_found}, State};
         Card -> {reply, {ok, card_to_map(Card)}, State}
+    end;
+handle_call({get_keyword, Keyword}, _From, State) ->
+    case maps:get(string:lowercase(Keyword), State#state.keywords, false) of
+        false -> {reply, {error, not_found}, State};
+        Cards -> {reply, {ok, Cards}, State}
     end.
 
-handle_cast(load, S0=#state{card_dir=Dir}) ->
-    Cards = load_cards(Dir),
-    {noreply, S0#state{cards=Cards}}.
+handle_cast(load, S0=#state{card_file=CardFile}) ->
+    Cards = load_cards(CardFile),
+    logger:info("loaded ~p cards~n", [maps:size(Cards)]),
+    Keywords = generate_keyword_map(Cards),
+    logger:info("loaded ~p keywords~n", [maps:size(Keywords)]),
+    {noreply, S0#state{cards=Cards, keywords=Keywords}}.
 
 %%====================================================================
 %% helper methods
 %%====================================================================
 
-load_cards(Dir0) ->
-    {ok, Files} = file:list_dir(Dir0),
-    Dir1 = case lists:suffix("/", Dir0) of
-               true -> Dir0;
-               false -> Dir0 ++ "/"
-           end,
-    CardList = lists:map(fun(F) -> read_card(Dir1 ++ F) end, Files),
-    MakeKey = fun(#card{name=V0}) ->
-                      V1 = string:lowercase(binary_to_list(V0)),
-                      V2 = lists:flatten(string:replace(V1, " ", "-")),
-                      list_to_binary(V2)
-              end,
-    lists:foldl(fun(C, M) -> M#{MakeKey(C) => C} end, #{}, CardList).
+load_cards(CardFile) ->
+    {ok, JsonData} = file:read_file(CardFile),
+    #{<<"units">> := Units} = jsone:decode(JsonData),
+    CardList = lists:map(fun({_, Card}) -> read_card(Card) end,
+                         maps:to_list(Units)),
+    lists:foldl(fun(C, M) -> M#{make_key(C#card.name) => C} end, #{}, CardList).
 
-read_card(Path) ->
-    {ok, JsonData} = file:read_file(Path),
-    CardData = jsone:decode(JsonData),
+read_card(CardData) ->
     #{<<"name">> := Name,
       <<"factions">> := Factions,
       <<"keywords">> := Keywords,
-      <<"versatile">> := Versatile,
-      <<"role">> := Role,
-      <<"boxes">> := Boxes} = CardData,
-    logger:info("loaded ~s from ~s", [Name, Path]),
+      <<"station">> := Station} = CardData,
+    logger:debug("loaded card: ~s", [Name]),
     Card = #card{name=Name,
                  factions=Factions,
                  keywords=Keywords,
-                 versatile=Versatile,
-                 role=Role,
+                 versatile=maps:get(<<"versatile">>, CardData, false),
+                 station=Station,
                  limit=maps:get(<<"limit">>, CardData, 1),
-                 boxes=Boxes},
+                 boxes=[]},
     case validate_card(Card) of
         [] -> ok;
         Errors ->
@@ -97,11 +112,26 @@ read_card(Path) ->
     end,
     Card.
 
+generate_keyword_map(Cards) ->
+    Fn = fun({Key, #card{keywords=Keywords}}, Acc) ->
+                 IKW = fun(KW, A) ->
+                               maps:update_with(make_key(KW),
+                                                fun(V) -> [Key|V] end,
+                                                [], A)
+                       end,
+                 lists:foldl(IKW, Acc, Keywords)
+         end,
+    Map = lists:foldl(Fn, #{}, maps:to_list(Cards)),
+    lists:foreach(fun(Key) -> logger:debug("loaded keyword: ~s", [Key]) end,
+                  maps:keys(Map)),
+    Map.
+
+
 card_to_map(#card{name=Name, factions=Factions, keywords=Keywords,
-                  versatile=Versatile, role=Role, limit=Limit,
+                  versatile=Versatile, station=Station, limit=Limit,
                   boxes=Boxes}) ->
     #{name => Name, factions => Factions, keywords => Keywords,
-      versatile => Versatile, role => Role, limit => Limit,
+      versatile => Versatile, station => Station, limit => Limit,
       boxes => Boxes}.
 
 validate_card(Card) ->
@@ -110,7 +140,7 @@ validate_card(Card) ->
                          fun valid_factions/1,
                          fun valid_keyword/1,
                          fun valid_versatile/1,
-                         fun valid_role/1,
+                         fun valid_station/1,
                          fun valid_boxes/1]),
     lists:filter(fun(R) -> R =/= ok end, Results).
 
@@ -119,13 +149,14 @@ valid_name(_Card) -> "invalid name type".
 
 valid_factions(#card{factions=Factions}) ->
     FactionList = [<<"Guild">>,
-                   <<"Resurrectionists">>,
+                   <<"Resurrectionist">>,
                    <<"Neverborn">>,
                    <<"Arcanists">>,
                    <<"Outcasts">>,
                    <<"Bayou">>,
                    <<"Ten Thunders">>,
-                   <<"Explorer's Society">>],
+                   <<"Explorer's Society">>,
+                   <<"Dead Man's Hand">>],
     InFaction = fun(F) -> lists:any(fun(G) -> F =:= G end, FactionList) end,
     case lists:all(InFaction, Factions) of
         true -> ok;
@@ -138,11 +169,16 @@ valid_keyword(_Keywords) -> ok.
 valid_versatile(#card{versatile=Versatile}) when is_boolean(Versatile) -> ok;
 valid_versatile(_Card) -> "invalid versatile type".
 
-valid_role(#card{role= <<"Master">>}) -> ok;
-valid_role(#card{role= <<"Henchman">>}) -> ok;
-valid_role(#card{role= <<"Enforcer">>}) -> ok;
-valid_role(#card{role= <<"Minion">>}) -> ok;
-valid_role(#card{role=Role}) ->
-    lists:flatten(io_lib:format("invalid role: ~s", [Role])).
+valid_station(#card{station= <<"Master">>}) -> ok;
+valid_station(#card{station= <<"Henchman">>}) -> ok;
+valid_station(#card{station= <<"Enforcer">>}) -> ok;
+valid_station(#card{station= <<"Minion">>}) -> ok;
+valid_station(#card{station=Station}) ->
+    lists:flatten(io_lib:format("invalid station: ~s", [Station])).
 
 valid_boxes(_Boxes) -> ok.
+
+make_key(V0) ->
+    V1 = string:lowercase(binary_to_list(V0)),
+    V2 = lists:flatten(string:replace(V1, " ", "-")),
+    list_to_binary(V2).

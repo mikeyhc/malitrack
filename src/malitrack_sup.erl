@@ -8,7 +8,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1, get_card_db/0]).
+-export([start_link/0, get_card_db/0]).
 
 %% supervisor callbacks
 -export([init/1]).
@@ -19,8 +19,8 @@
 %% API
 %%====================================================================
 
-start_link(CardDir) ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, [CardDir]).
+start_link() ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 get_card_db() ->
     get_child_pid(card_db).
@@ -29,12 +29,12 @@ get_card_db() ->
 %% supervisor callbacks
 %%====================================================================
 
-init([CardDir]) ->
+init([]) ->
     SupFlags = #{strategy => one_for_all,
                  intensity => 0,
                  period => 1},
     ChildSpecs = [#{id => card_db,
-                    start => {card_db, start_link, [CardDir]}}
+                    start => {card_db, start_link, []}}
                  ],
     {ok, {SupFlags, ChildSpecs}}.
 

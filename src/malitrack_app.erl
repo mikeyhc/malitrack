@@ -11,8 +11,6 @@
 
 start(_StartType, _StartArgs) ->
     Layout = mst:compile(layout),
-    {ok, CardDirEnv} = application:get_env(malitrack, card_dir),
-    CardDir = filename:join([code:priv_dir(malitrack), CardDirEnv]),
     Routes = [{'_', [{"/", basic_redirect, #{path => <<"/crews">>,
                                              code => 302}},
                      {"/card/:name", card_handler,
@@ -24,7 +22,7 @@ start(_StartType, _StartArgs) ->
     {ok, _} = cowboy:start_clear(malitrack_listener,
                                  [{port, 8080}],
                                  #{env => #{dispatch => Dispatch}}),
-    malitrack_sup:start_link(CardDir).
+    malitrack_sup:start_link().
 
 stop(_State) ->
     ok.

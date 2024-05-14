@@ -6,10 +6,12 @@
   {applications,
    [kernel,
     stdlib,
-    cowboy
+    cowboy,
+    gun,
+    mst
    ]},
   {env,[
-   {card_dir, "data/cards"}
+   {card_file, "data/cards.json"}
   ]},
   {modules, []},
 
