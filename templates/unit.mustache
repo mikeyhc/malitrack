@@ -1,4 +1,4 @@
-{{#card}}
+{{#unit}}
 <h1>{{name}}</h1>
 
 <table>
@@ -26,12 +26,12 @@
             <td>Limit:</td>
             <td>{{ limit }}</td>
         </tr>
-        {{#boxes}}
+        {{#errors}}
         <tr>
-            <td>Boxes:</td>
+            <td>Error:</td>
             <td>{{.}}</td>
         </tr>
-        {{/boxes}}
+        {{/errors}}
     </tbody>
 </table>
-{{/card}}
+{{/unit}}

@@ -1,0 +1,54 @@
+[
+  {
+    "name": "Desolation",
+    "contents": {
+      "Desolation Engine": 1,
+      "Abomination": 4
+    },
+    "price": 50,
+    "url": "https://giveusyourmoneypleasethankyou-wyrd.com/products/desolation"
+  },
+  {
+    "name": "Perdita Core Box",
+    "contents": {
+      "Perdita Ortega": 1,
+      "Francisco Ortega": 1,
+      "Enslaved Nephilim": 1,
+      "Nino Ortega": 1,
+      "Santiago Ortega": 1,
+      "Papa Loco": 1,
+      "Abuela Ortega": 1
+    },
+    "price": 52.50,
+    "url": "https://giveusyourmoneypleasethankyou-wyrd.com/products/perdita-core-box"
+  },
+  {
+    "name": "A Light in the Dark",
+    "contents": {
+      "Adze": 1,
+      "Will o' the Wisps": 3
+    },
+    "price": 38,
+    "url": "https://giveusyourmoneypleasethankyou-wyrd.com/products/a-light-in-the-dark"
+  },
+  {
+    "name": "Titania Core Box",
+    "contents": {
+      "Titania": 1,
+      "Aeslin": 1,
+      "Gorar": 1,
+      "Autumn Knights": 3
+    },
+    "price": 52.50,
+    "url": "https://giveusyourmoneypleasethankyou-wyrd.com/products/titania-core-Box"
+  },
+  {
+    "name": "Silent Strike",
+    "contents": {
+      "The Lone Swordsman": 1,
+      "Samurai": 3
+    },
+    "price": 32.50,
+    "url": "https://giveusyourmoneypleasethankyou-wyrd.com/products/silent-strike"
+  }
+]

@@ -11,7 +11,8 @@
     mst
    ]},
   {env,[
-   {card_file, "data/cards.json"}
+   {unit_file, "data/units.json"},
+   {box_file, "data/boxes.json"}
   ]},
   {modules, []},
 
