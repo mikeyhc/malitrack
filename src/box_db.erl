@@ -4,7 +4,7 @@
 
 % API
 -export([start_link/0, start_link/1, get_box/1, get_boxes_for_unit/1,
-         default_box_file/0, validate_boxes/1, reload/0]).
+         default_box_file/0, validate_boxes/1, reload/0, download_box/1]).
 
 % gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2]).
@@ -58,6 +58,10 @@ default_box_file() ->
     {ok, BoxFileEnv} = application:get_env(malitrack, box_file),
     filename:join([code:priv_dir(malitrack), BoxFileEnv]).
 
+-spec download_box(string()) -> string().
+download_box(BoxName) ->
+    gen_server:call(malitrack_sup:get_box_db(), {download, BoxName}).
+
 -spec reload() -> ok.
 reload() ->
     gen_server:cast(malitrack_sup:get_box_db(), load).
@@ -78,7 +82,16 @@ handle_call({get_box, Name}, _From, State) ->
     {reply, Reply, State};
 handle_call({get_boxes_for_unit, Unit}, _From, State) ->
     Reply = maps:get(make_key(Unit), State#state.unit_to_box, []),
-    {reply, Reply, State}.
+    {reply, Reply, State};
+handle_call({download, BoxName}, _From,
+            S0=#state{boxes=Boxes0, box_file=BoxFile}) ->
+    Box = read_box(box_loader:load(BoxName)),
+    Boxes = Boxes0#{list_to_binary(BoxName) => Box},
+    store_boxes(BoxFile, Boxes),
+    logger:info("wrote ~p boxes", [maps:size(Boxes)]),
+    Units = generate_units_map(Boxes),
+    logger:info("generated ~p unit -> box lookups", [maps:size(Units)]),
+    {reply, ok, S0#state{boxes=Boxes, unit_to_box=Units}}.
 
 handle_cast(load, S0=#state{box_file=BoxFile}) ->
     Boxes = load_boxes(BoxFile),
@@ -92,21 +105,38 @@ handle_cast(load, S0=#state{box_file=BoxFile}) ->
 %%====================================================================
 
 load_boxes(BoxFile) ->
-    {ok, JsonData} = file:read_file(BoxFile),
-    Boxes = lists:map(fun read_box/1, jsone:decode(JsonData)),
-    lists:foldl(fun(B, A) -> A#{make_key(B#box.name) => B} end, #{}, Boxes).
+     case file:read_file(BoxFile) of
+         {ok, JsonData} ->
+             Boxes = lists:map(fun read_box/1, jsone:decode(JsonData)),
+             lists:foldl(fun(B, A) -> A#{make_key(B#box.name) => B} end, #{},
+                         Boxes);
+         {error, enoent} -> #{}
+     end.
 
+store_boxes(BoxFile, Boxes) ->
+    ToMap = fun(#box{name=Name, contents=Contents, price=Price, url=URL}) ->
+                    #{<<"name">> => Name,
+                      <<"contents">> => Contents,
+                      <<"price">> => Price,
+                      <<"url">> => URL}
+            end,
+    JsonBoxes = lists:map(ToMap, maps:values(Boxes)),
+    ok = file:write_file(BoxFile,
+                         jsone:encode(JsonBoxes,[{float_format, [compact]}])).
+
+read_box(#{name := Name,
+           contents := Contents,
+           price := Price,
+           url := URL}) ->
+    Box = #box{name=Name, contents=Contents, price=Price, url=URL},
+    validate_box(Box),
+    Box;
 read_box(#{<<"name">> := Name,
            <<"contents">> := Contents,
            <<"price">> := Price,
            <<"url">> := URL}) ->
     Box = #box{name=Name, contents=Contents, price=Price, url=URL},
-    case validate_box(Box) of
-        [] -> ok;
-        Errors ->
-            ErrorStr = string:join(Errors, "; "),
-            logger:warning("box \"~s\" failed validation: ~s", [Name, ErrorStr])
-    end,
+    validate_box(Box),
     Box.
 
 generate_units_map(Boxes) ->
@@ -120,14 +150,19 @@ generate_units_map(Boxes) ->
           end,
     maps:fold(Fn0, #{}, Boxes).
 
-validate_box(Box) ->
+validate_box(Box=#box{name=Name}) ->
     Results = lists:map(fun(Check) -> Check(Box) end,
                         [fun valid_name/1,
                          fun valid_contents/1,
                          fun valid_price/1,
                          fun valid_url/1
                         ]),
-    lists:filter(fun(R) -> R =/= ok end, Results).
+    case lists:filter(fun(R) -> R =/= ok end, Results) of
+        [] -> ok;
+        Errors ->
+            ErrorStr = string:join(Errors, "; "),
+            logger:warning("box \"~s\" failed validation: ~s", [Name, ErrorStr])
+    end.
 
 valid_name(#box{name=Name}) when is_binary(Name) -> ok;
 valid_name(_Box) -> "invalid name type".
